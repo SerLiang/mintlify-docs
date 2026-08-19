@@ -104,9 +104,9 @@ When you reach the last page, `nextCursor` is `null`:
 
 | Endpoint | Path | Description |
 |---|---|---|
-| Get Trader Activity | `GET /v1/trader/{address}/activity` | Paginated buy, sell, and redeem history for a wallet across all Polymarket markets it has touched. |
-| Get Deposits & Withdrawals | `GET /v1/trader/{address}/deposits-withdrawals` | Combined USDC deposit and withdrawal history for a wallet, ordered newest-first. |
-| Get Actions by Hash | `GET /v1/tx/{txHash}` | Decoded summary and individual fills for a single on-chain transaction. |
+| [Get Trader Activity](/api-reference/endpoints/get-trader-activity) | `GET /v1/trader/{address}/activity` | Paginated buy, sell, and redeem history for a wallet across all Polymarket markets it has touched. |
+| [Get Deposits & Withdrawals](/api-reference/endpoints/get-deposits-withdrawals) | `GET /v1/trader/{address}/deposits-withdrawals` | Combined USDC deposit and withdrawal history for a wallet, ordered newest-first. |
+| [Get Actions by Hash](/api-reference/endpoints/get-transaction) | `GET /v1/tx/{txHash}` | Decoded summary and individual fills for a single on-chain transaction. |
 
 <Tip>
   Prices in activity and transaction responses are expressed in **cents** (0–100). A `price` of `78.0` means 78¢ per share, not $78. Keep this in mind when calculating position values or P&L.

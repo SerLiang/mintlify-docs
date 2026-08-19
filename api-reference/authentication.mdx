@@ -1,5 +1,5 @@
 ---
-title: "API Key Authentication for the Orbscan Open API"
+title: "Orbscan Open API Authentication Using Bearer Tokens"
 sidebarTitle: "Authentication"
 description: "Authenticate every Orbscan API request with a Bearer token. Learn how to obtain your API key and use it securely across curl, Python, and JavaScript."
 ---
@@ -8,7 +8,7 @@ The Orbscan Open API uses **Bearer token authentication**. Every request you sen
 
 ## Getting an API Key
 
-Request access to the Orbscan Open API by visiting [orbscan.com](https://orbscan.com) and navigating to **Settings → API Keys → Generate New Key**. Once your key is issued, copy it to a secure location — you will not be able to view it again in full after the initial generation.
+Request an API key by completing the [sign-up form](https://orbscan.com/contactus) on the Orbscan website. Once your key is issued, copy it to a secure location — you will not be able to view it again in full after the initial generation.
 
 ## The Authorization Header
 
@@ -74,7 +74,7 @@ Treat your API key as a secret credential. Follow these practices to keep it saf
 - **Store it in an environment variable.** Load your key from `process.env.ORBSCAN_API_KEY` (Node.js) or `os.environ["ORBSCAN_API_KEY"]` (Python) rather than hard-coding it.
 - **Never commit it to source control.** Add any `.env` files that contain secrets to `.gitignore` before your first commit.
 - **Never expose it in client-side code.** Browser JavaScript, mobile apps, and any other code that runs on end-user devices can be inspected — keep your key on the server side only.
-- **Rotate it immediately if leaked.** Generate a replacement key in Settings → API Keys as soon as you suspect a key has been exposed.
+- **Rotate it immediately if leaked.** Request a replacement key via the [sign-up form](https://orbscan.com/contactus) as soon as you suspect a key has been exposed.
 
 ## What Happens Without a Valid Key
 

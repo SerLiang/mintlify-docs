@@ -62,7 +62,7 @@ The following fields appear on every item returned by the `/v1/trader/{address}/
 | `price` | `number` | Price per share **in cents (0–100)**. A value of `78` means 78¢ per share. |
 | `quantity` | `number` | Number of outcome shares involved in the action. |
 | `grossValue` | `number` | Gross USDC value of the action — calculated as `price × quantity / 100`. |
-| `transferNetAmount` | `number` | Net USDC actually moved: positive means USDC flowed **into** the wallet (sell or redeem), negative means USDC flowed **out** (buy). |
+| `transferNetAmount` | `number` | Net USDC actually moved: positive means USDC flowed **out of** the wallet into the market (buy), negative means USDC flowed **into** the wallet (sell or redeem). |
 | `fee` | `number` | Platform fee deducted from the trade value, in USDC. `0` for redeems. |
 | `positionSide` | `string` | Which outcome the trade is on: `"Yes"` or `"No"`. |
 | `liquidityRole` | `string \| null` | `MAKER`, `TAKER`, or `null` for redeems. |

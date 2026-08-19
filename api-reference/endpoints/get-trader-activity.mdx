@@ -117,7 +117,7 @@ print(response.json())
         </ResponseField>
 
         <ResponseField name="recordType" type="string">
-          Internal record classification, for example `SUMMARY` or `REDEEMS`.
+          Record category returned by the API, for example `SUMMARY` (a trade) or `REDEEMS` (a redemption).
         </ResponseField>
 
         <ResponseField name="actionType" type="integer">
@@ -141,7 +141,7 @@ print(response.json())
         </ResponseField>
 
         <ResponseField name="transferNetAmount" type="number">
-          Net USDC amount moved. Positive means USDC left the wallet (shares received); negative means USDC entered the wallet (shares redeemed or sold).
+          Net USDC change for the wallet. Positive means USDC left the wallet — for example, spending USDC on a buy. Negative means USDC entered the wallet — for example, receiving USDC from a redeem or sell.
         </ResponseField>
 
         <ResponseField name="txHash" type="string">

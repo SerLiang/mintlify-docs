@@ -1,7 +1,7 @@
 ---
-title: "PnL and Performance Metrics Explained"
+title: "PnL and Performance Metrics for Polymarket Traders"
 sidebarTitle: "PnL Metrics"
-description: "Learn how Orbscan computes realized and unrealized PnL, Sharpe ratio, win rate, and max drawdown for Polymarket traders from on-chain data."
+description: "Learn how Orbscan computes realized PnL, win rate, Sharpe ratio, and max drawdown for Polymarket traders from raw on-chain activity data."
 ---
 
 Orbscan computes a suite of performance metrics for every Polymarket trader, derived entirely from on-chain data recorded on the Polygon network. Because every trade, redemption, and payout is auditable on-chain, the calculations are transparent and tamper-proof — you can verify any figure against the raw blockchain events yourself. These metrics help you evaluate trader quality, compare strategies, and understand the risk profile behind any wallet's track record.
@@ -53,13 +53,13 @@ These two fields both measure value in USDC, but they capture different things:
 | Field | Formula | What It Represents |
 |---|---|---|
 | `grossValue` | `(price / 100) × quantity` | The theoretical value of the shares traded, based on price and quantity alone. |
-| `transferNetAmount` | Actual USDC moved ± fees | The real USDC that changed hands in the transaction, after the platform fee is applied. Positive = USDC received by the wallet; negative = USDC sent by the wallet. |
+| `transferNetAmount` | Actual USDC moved ± fees | The real USDC that changed hands in the transaction, after the platform fee is applied. Positive = USDC sent out of the wallet (buy); negative = USDC received by the wallet (sell or redeem). |
 
-For a Buy of 5 shares at 78¢ with a fee of $0.026:
-- `grossValue` = **$3.90** (the share value)
-- `transferNetAmount` = **$5.00** (the USDC the wallet actually paid, which includes share cost plus market-maker pricing)
+For a Buy of 5 shares at 78¢:
+- `grossValue` = **$3.90** — the theoretical share value at the quoted price (`78/100 × 5`)
+- `transferNetAmount` = **$5.00** — the net USDC that moved out of the wallet in this transaction
 
-The difference between `transferNetAmount` and `grossValue` reflects platform fees and any order-book spread. For a Redeem, `transferNetAmount` is negative (USDC flows into the wallet) and equals `quantity × 1.00`.
+The difference between `transferNetAmount` and `grossValue` can reflect order-book spread, fees, or multi-fill aggregation within a single transaction. For a Redeem, `transferNetAmount` is negative (USDC is received by the wallet) and its absolute value equals `quantity × 1.00`.
 
 ## Platform Fees
 
@@ -80,13 +80,19 @@ Fees are deducted by the Polymarket protocol at the time of the trade. Orbscan s
 
 ## Performance Metrics Summary
 
-| Metric | Field | Definition | Time Window |
+The metrics below are computed by Orbscan from the raw on-chain trade data returned by the activity endpoint (`GET /v1/trader/{address}/activity`). They are displayed on trader profile pages at [orbscan.com](https://orbscan.com) and are **not returned as fields in the Open API response** — the API returns individual trade records, and these analytics are derived from those records.
+
+<Note>
+  If you are building your own analytics, you can derive all of these metrics by fetching the full activity history for a wallet and applying the formulas described on this page.
+</Note>
+
+| Metric | Derived From | Definition | Time Window |
 |---|---|---|---|
-| Total PnL | `pnl_total` | `realized_pnl + unrealized_pnl` across all activity | All-time |
-| 30-Day PnL | `pnl_30d` | Rolling PnL for trades opened or closed in the past 30 days | 30 days |
-| Win Rate | `win_rate` | `(resolved_wins / total_resolved_markets) × 100` | All-time |
-| Sharpe Ratio | `sharpe_ratio` | `mean_return / std_deviation_of_returns` | All-time |
-| Max Drawdown | `max_drawdown` | Largest peak-to-trough decline in cumulative PnL | All-time |
+| Total PnL | Activity records (all) | `realized_pnl + unrealized_pnl` across all activity | All-time |
+| 30-Day PnL | Activity records (last 30 days) | Rolling PnL for trades opened or closed in the past 30 days | 30 days |
+| Win Rate | Resolved activity records | `(resolved_wins / total_resolved_markets) × 100` | All-time |
+| Sharpe Ratio | PnL time series | `mean_return / std_deviation_of_returns` | All-time |
+| Max Drawdown | PnL time series | Largest peak-to-trough decline in cumulative PnL | All-time |
 
 ## Win Rate
 
@@ -96,7 +102,7 @@ Win rate measures how consistently a trader picks the correct outcome across res
 win_rate = (resolved_wins / total_resolved_markets) × 100
 ```
 
-A **win** is counted when the trader held shares of the outcome declared correct at resolution — regardless of position size or entry price. Win rate is a consistency signal, not a profit signal. A trader with a 90% win rate who always bets small on high-probability outcomes may generate less dollar PnL than a trader with a 60% win rate who sizes up on high-conviction calls. Always read win rate alongside `pnl_total` and `sharpe_ratio` for a complete picture.
+A **win** is counted when the trader held shares of the outcome declared correct at resolution — regardless of position size or entry price. Win rate is a consistency signal, not a profit signal. A trader with a 90% win rate who always bets small on high-probability outcomes may generate less dollar PnL than a trader with a 60% win rate who sizes up on high-conviction calls. Always read win rate alongside total PnL and Sharpe ratio for a complete picture.
 
 ## Sharpe Ratio
 
