@@ -1,0 +1,92 @@
+---
+title: "API Key Authentication for the Orbscan Open API"
+sidebarTitle: "Authentication"
+description: "Authenticate every Orbscan API request with a Bearer token. Learn how to obtain your API key and use it securely across curl, Python, and JavaScript."
+---
+
+The Orbscan Open API uses **Bearer token authentication**. Every request you send must include an `Authorization` header with your API key. Requests that omit the header, or that supply an invalid key, are rejected immediately with a `401` response — no data is returned.
+
+## Getting an API Key
+
+Request access to the Orbscan Open API by visiting [orbscan.com](https://orbscan.com) and navigating to **Settings → API Keys → Generate New Key**. Once your key is issued, copy it to a secure location — you will not be able to view it again in full after the initial generation.
+
+## The Authorization Header
+
+Add the following header to every request, replacing `YOUR_API_KEY` with your actual key:
+
+```http
+Authorization: Bearer YOUR_API_KEY
+```
+
+## Code Examples
+
+Use the examples below to make your first authenticated request in your preferred language.
+
+<CodeGroup>
+
+```bash curl
+curl "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```python Python
+import requests
+
+resp = requests.get(
+    "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity",
+    params={"limit": 50},
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    timeout=30,
+)
+print(resp.json())
+```
+
+```javascript JavaScript (fetch)
+const resp = await fetch(
+  "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=50",
+  {
+    headers: {
+      Authorization: "Bearer YOUR_API_KEY",
+    },
+  }
+);
+const body = await resp.json();
+console.log(body);
+```
+
+</CodeGroup>
+
+A successful, authenticated response looks like this:
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": { }
+}
+```
+
+## Security Best Practices
+
+Treat your API key as a secret credential. Follow these practices to keep it safe:
+
+- **Store it in an environment variable.** Load your key from `process.env.ORBSCAN_API_KEY` (Node.js) or `os.environ["ORBSCAN_API_KEY"]` (Python) rather than hard-coding it.
+- **Never commit it to source control.** Add any `.env` files that contain secrets to `.gitignore` before your first commit.
+- **Never expose it in client-side code.** Browser JavaScript, mobile apps, and any other code that runs on end-user devices can be inspected — keep your key on the server side only.
+- **Rotate it immediately if leaked.** Generate a replacement key in Settings → API Keys as soon as you suspect a key has been exposed.
+
+## What Happens Without a Valid Key
+
+If you omit the `Authorization` header or supply an incorrect key, the API returns a `401` response with the standard error envelope:
+
+```json
+{
+  "success": false,
+  "code": "401",
+  "message": "Missing or invalid API key",
+  "data": null
+}
+```
+
+Check the `code` field programmatically to detect authentication failures in your error-handling logic. See [Errors](/api-reference/errors) for the full list of error codes and how to handle them.

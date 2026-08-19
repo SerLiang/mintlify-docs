@@ -1,0 +1,102 @@
+---
+title: "Authenticate with the Orbscan API Using Bearer Tokens"
+sidebarTitle: "Authentication"
+description: "Learn how to get an Orbscan API key, pass it in the Authorization header, and handle authentication errors like 401, 403, and 429 responses."
+---
+
+Orbscan uses API key authentication to secure every request. Include your personal API key in the `Authorization` header using the Bearer scheme on every call you make to the API. There are no cookies, OAuth flows, or session tokens — just a single header that identifies your account and enforces your plan's rate limits.
+
+## Get your API key
+
+<Steps>
+  <Step title="Create an Orbscan account">
+    Visit [orbscan.com](https://orbscan.com) and sign up for a free account using your email address. Verify your email to activate the account.
+  </Step>
+  <Step title="Open Settings → API Keys">
+    After logging in, click your avatar in the top-right corner and select **Settings**. From the left-hand navigation menu, choose **API Keys**.
+  </Step>
+  <Step title="Generate and copy your key">
+    Click **Generate New Key**, give it a descriptive label (for example `dev-local` or `production-app`), and confirm. Your key appears **once only** — copy it immediately and store it somewhere safe such as a password manager. If you lose it, revoke the old key and generate a new one.
+  </Step>
+</Steps>
+
+<Warning>
+  Your API key grants full access to your Orbscan account and counts against your plan's rate limits. Never commit it to source control, paste it in public forums, or include it in client-side code that ships to end users.
+</Warning>
+
+## Pass your key in requests
+
+Include your API key as a Bearer token in the `Authorization` header of every request:
+
+```http
+Authorization: Bearer YOUR_API_KEY
+```
+
+The examples below show how to add this header in the most common HTTP clients:
+
+<CodeGroup>
+  ```bash curl
+  curl -X GET "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=5" \
+    -H "Authorization: Bearer YOUR_API_KEY" \
+    -H "Accept: application/json"
+  ```
+
+  ```python Python
+  import os
+  import requests
+
+  response = requests.get(
+      "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity",
+      params={"limit": 5},
+      headers={
+          "Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}",
+          "Accept": "application/json",
+      },
+  )
+
+  data = response.json()
+  ```
+
+  ```javascript JavaScript
+  const response = await fetch(
+    "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=5",
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.ORBSCAN_API_KEY}`,
+        Accept: "application/json",
+      },
+    }
+  );
+
+  const data = await response.json();
+  ```
+</CodeGroup>
+
+<Tip>
+  Store your API key in an environment variable (for example `ORBSCAN_API_KEY`) rather than hard-coding it in your source files. This keeps it out of version control and makes it easy to rotate without touching your application code.
+</Tip>
+
+## Authentication error codes
+
+When something goes wrong with authentication, the API returns a standard HTTP error status alongside a JSON body that describes the problem.
+
+| Status code | Meaning | How to resolve |
+|---|---|---|
+| `401 Unauthorized` | Your API key is missing, malformed, or has been revoked. | Check that the `Authorization` header is present and that the key value is correct. Regenerate the key in Settings if needed. |
+| `403 Forbidden` | Your key is valid but your plan does not include access to this endpoint. | Verify that your current plan covers the endpoint you're calling. Upgrade your plan if necessary. |
+| `429 Too Many Requests` | Your key has exceeded the rate limit for the current time window. | Wait for the window to reset (check the `X-RateLimit-Reset` response header) or reduce your request frequency. |
+
+### Example error response
+
+```json
+{
+  "success": false,
+  "code": "401",
+  "message": "Missing or invalid API key",
+  "data": null
+}
+```
+
+<Note>
+  Every API response includes rate limit headers so you can monitor your usage programmatically: `X-RateLimit-Limit` is your total allowed requests per window, `X-RateLimit-Remaining` is how many you have left, and `X-RateLimit-Reset` is the Unix timestamp when the window resets.
+</Note>

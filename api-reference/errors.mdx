@@ -1,0 +1,78 @@
+---
+title: "Error Responses and Status Codes in the Orbscan API"
+sidebarTitle: "Errors"
+description: "Understand Orbscan's JSON error envelope, every HTTP status code you may encounter, and how to write robust error-handling logic in your integration."
+---
+
+The Orbscan API uses standard HTTP status codes to signal the outcome of every request. When a request fails, the response body uses the same JSON envelope as a successful response — but with `success` set to `false`, `data` set to `null`, and `code` set to the HTTP status as a string.
+
+## The Error Envelope
+
+Every error response follows this shape:
+
+```json
+{
+  "success": false,
+  "code": "401",
+  "message": "Missing or invalid API key",
+  "data": null
+}
+```
+
+Check `success` first to determine whether the request succeeded, then branch on `code` (or the HTTP status, which always matches) to decide how to respond.
+
+## Error Codes
+
+| HTTP Status | `code` value | Meaning | How to resolve |
+|---|---|---|---|
+| `400 Bad Request` | `"400"` | A path parameter or query value is malformed — for example, an `address` that is not a valid `0x…` hex string. | Validate your inputs before sending. Check that wallet addresses are correctly formatted and that integer fields contain integers. |
+| `401 Unauthorized` | `"401"` | The `Authorization: Bearer` header is missing or the key is invalid. | Confirm that you are including the header on every request and that the key value is correct. See [Authentication](/api-reference/authentication). |
+| `403 Forbidden` | `"403"` | Your key is valid but your current plan does not include access to the requested endpoint. | Review the endpoints available on your plan at [orbscan.com](https://orbscan.com) and upgrade if needed. |
+| `404 Not Found` | `"404"` | The requested resource does not exist — for example, an unrecognised `txHash` or an incorrect endpoint path. | Double-check the endpoint path and the values of any path parameters. |
+| `429 Too Many Requests` | `"429"` | You have exceeded the rate limit for your API key. | Wait until the `Retry-After` header value (seconds) has elapsed before retrying. See [Rate Limits](/api-reference/rate-limits). |
+| `500 Internal Server Error` | `"500"` | An unexpected error occurred on the server. | Retry the request using exponential backoff. If the problem persists, contact Orbscan support. |
+
+<Note>
+  A successful lookup that finds no matching data still returns **`200`** with `success: true` — never `404`. For list endpoints, `data.items` will be an empty array. For single-record lookups, `data` will be `null`. Treat these as valid empty results, not errors.
+</Note>
+
+## Handling Errors in Code
+
+The pattern below is a reliable approach for any integration: inspect `success` first, then switch on `code` to handle specific cases. Anything unexpected can surface as a generic exception with the `message` included for debugging.
+
+```python Python
+import requests
+
+def fetch_activity(address: str, api_key: str) -> dict:
+    resp = requests.get(
+        f"https://orbscan.com/open-api/v1/trader/{address}/activity",
+        params={"limit": 50},
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=30,
+    )
+    body = resp.json()
+
+    if not body["success"]:
+        code = body["code"]
+        msg  = body["message"]
+
+        if code == "401":
+            raise RuntimeError("Authentication failed — check your Orbscan API key.")
+        elif code == "403":
+            raise RuntimeError("Your plan does not include access to this endpoint.")
+        elif code == "400":
+            raise ValueError(f"Bad request: {msg}")
+        elif code == "429":
+            retry_after = resp.headers.get("Retry-After", "unknown")
+            raise RuntimeError(f"Rate limit exceeded. Retry after {retry_after}s.")
+        else:
+            raise RuntimeError(f"Orbscan API error {code}: {msg}")
+
+    # A 200 with success: true but empty data is a valid "no results" response
+    data = body["data"]
+    if data is None or (isinstance(data, dict) and not data.get("items")):
+        print("No results found.")
+        return {}
+
+    return data
+```

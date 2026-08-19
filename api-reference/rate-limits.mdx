@@ -1,0 +1,102 @@
+---
+title: "Rate Limits and Request Quotas for the Orbscan API"
+sidebarTitle: "Rate Limits"
+description: "Understand Orbscan's per-key rate limit headers, what a 429 response means, and best practices for staying within your quota with backoff and caching."
+---
+
+The Orbscan API enforces per-key rate limits to ensure fair, reliable access for every integration. When your API key exceeds its allowed request rate, the API returns a `429 Too Many Requests` response and stops processing new requests from that key until the current window resets. Design your integration to read the rate limit headers on every response so you can throttle proactively — before hitting a `429`.
+
+## Rate Limit Headers
+
+Every API response includes the following headers. Read them on each response to track your remaining quota in real time.
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | The total number of requests your API key is allowed within the current window. |
+| `X-RateLimit-Remaining` | The number of requests you have left in the current window. |
+| `X-RateLimit-Reset` | A Unix timestamp (seconds) indicating when the current window resets and your quota refills. |
+| `Retry-After` | Only present on `429` responses. The number of seconds you must wait before sending another request. |
+
+### Reading the headers with curl
+
+Use `curl -i` to print response headers alongside the body:
+
+```bash
+curl -i "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=1" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+The headers section of the response will look similar to this:
+
+```
+HTTP/2 200
+x-ratelimit-limit: 60
+x-ratelimit-remaining: 57
+x-ratelimit-reset: 1782862000
+content-type: application/json
+```
+
+## When You Hit the Rate Limit
+
+When you exceed your limit, the API returns a `429` response with the standard error envelope and a `Retry-After` header:
+
+```json
+{
+  "success": false,
+  "code": "429",
+  "message": "Too many requests. Please slow down.",
+  "data": null
+}
+```
+
+Do **not** immediately retry on a `429` — you will receive another `429` until the window resets. Instead, read the `Retry-After` header and pause for that many seconds before sending your next request.
+
+## Best Practices for Staying Within Your Quota
+
+Apply the following practices to make the most of your rate limit allowance:
+
+- **Use cursor pagination efficiently.** Fetch each page once and advance using `nextCursor`. Never re-fetch a page you have already received — this wastes quota and provides no new data.
+- **Cache responses where possible.** Market metadata such as titles, slugs, and logos changes infrequently. Store it locally and refresh only when needed rather than re-requesting it on every call.
+- **Implement exponential backoff on 429.** If you receive a `429`, wait for the `Retry-After` duration, then retry. If you continue to receive `429` responses, double your wait time on each subsequent attempt up to a sensible maximum.
+- **Space requests when processing many wallets.** If you are fetching data for a batch of addresses, introduce a short delay between requests — even 100–200 ms — rather than firing them all at once.
+- **Monitor `X-RateLimit-Remaining` proactively.** Slow down or pause when this value approaches zero instead of waiting for a `429` to tell you to stop.
+
+## Exponential Backoff Example
+
+The function below retries any request that returns `429`, doubling the wait time on each attempt up to a maximum of 60 seconds:
+
+```python Python
+import time
+import requests
+
+def get_with_backoff(url: str, headers: dict, max_retries: int = 5) -> requests.Response:
+    wait = 1  # initial wait in seconds
+
+    for attempt in range(max_retries):
+        resp = requests.get(url, headers=headers, timeout=30)
+
+        if resp.status_code != 429:
+            return resp  # success or a non-retryable error
+
+        retry_after = int(resp.headers.get("Retry-After", wait))
+        actual_wait = max(retry_after, wait)
+        print(f"Rate limited (attempt {attempt + 1}/{max_retries}). "
+              f"Waiting {actual_wait}s before retrying...")
+        time.sleep(actual_wait)
+        wait = min(wait * 2, 60)  # double the wait, cap at 60s
+
+    raise RuntimeError(f"Request to {url} failed after {max_retries} retries due to rate limiting.")
+
+
+# Usage
+API_KEY = "YOUR_API_KEY"
+response = get_with_backoff(
+    "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity",
+    headers={"Authorization": f"Bearer {API_KEY}"},
+)
+print(response.json())
+```
+
+## Plan Details and Upgrading
+
+Rate limit allowances vary by plan. Visit [orbscan.com](https://orbscan.com) to review the limits included in your current plan and to upgrade if your integration requires a higher quota.

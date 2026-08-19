@@ -1,0 +1,161 @@
+---
+title: "Monitor Live Market Activity and Decode Transactions"
+sidebarTitle: "Market Activity"
+description: "Filter a wallet's trades to a specific market, decode any transaction into a plain-English summary, and poll for new activity as it arrives on-chain."
+---
+
+This guide shows you how to monitor trading activity within a specific Polymarket market and decode individual transactions into human-readable form. You'll filter a wallet's history to a single market, inspect a transaction in detail, and build a polling loop that surfaces new trades as they land on-chain.
+
+---
+
+## Part 1 — Filter activity by market
+
+Pass the `marketIds` query parameter to `GET /v1/trader/{address}/activity` to scope results to a single market. You can find a market's numeric ID in the `marketId` field of any activity response item.
+
+```bash curl
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?marketIds=2707644&limit=50' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+The response contains only the records where `marketId == "2707644"`, in newest-first order. Add `fromTimestamp` or `toTimestamp` to narrow further to a specific time window, or repeat `marketIds` to include multiple markets in one request:
+
+```
+?marketIds=2707644&marketIds=2682268
+```
+
+---
+
+## Part 2 — Decode a transaction
+
+Use `GET /v1/tx/{txHash}` to turn a raw transaction hash into a structured, human-readable breakdown. Every activity item includes a `txHash` field you can pass directly to this endpoint.
+
+```bash curl
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/tx/0x66dc87fb47faf587002b89d183dbb9505fc7ef80da5e6ec49e271278e8d95fad' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+**Example response**
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "txHash": "0x66dc87fb47faf587002b89d183dbb9505fc7ef80da5e6ec49e271278e8d95fad",
+    "blockNumber": 88229726,
+    "blockTimestamp": 1781049574,
+    "profileAddress": "0xaac2469db4c243a2931acc252967b171bd97e8ce",
+    "sourceType": "TRADE",
+    "actionType": "Buy",
+    "sentence": "Buy 3604.58 No for $3546.12269 in Will Bitcoin dip to $59,000 on June 9?",
+    "marketSlug": "will-bitcoin-dip-to-59k-on-june-9",
+    "marketId": "2475928",
+    "actions": [
+      {
+        "actionType": "Buy",
+        "assetId": "38163660360188728397792916713023875464787138529265352624189549073473314732690",
+        "shares": "3604.58",
+        "price": "98.378249",
+        "txValue": "3546.12269",
+        "actor": "0xaac2469db4c243a2931acc252967b171bd97e8ce",
+        "txHash": "0x66dc87fb47faf587002b89d183dbb9505fc7ef80da5e6ec49e271278e8d95fad",
+        "blockTimestamp": 1781049574,
+        "fee": "4.02564",
+        "marketId": "2475928",
+        "marketSlug": "will-bitcoin-dip-to-59k-on-june-9",
+        "eventSlug": "what-price-will-bitcoin-hit-on-june-9",
+        "marketTitle": "Will Bitcoin dip to $59,000 on June 9?",
+        "positionSide": "No",
+        "outcomeIndex": 1,
+        "marketLogo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC-fullsize.png",
+        "liquidityRole": "TAKER"
+      }
+    ]
+  }
+}
+```
+
+**The `sentence` field** gives you a ready-to-read one-liner describing the entire transaction:
+
+> Buy 3604.58 No for $3546.12269 in Will Bitcoin dip to $59,000 on June 9?
+
+This tells you the trader bought 3,604.58 No-outcome shares, spending $3,546.12 USDC, in the Bitcoin dip market. Display this field directly in any UI that needs a human-readable trade summary.
+
+**The `actions` array** breaks the transaction down into its individual on-chain fills. A single user-level trade can match against multiple counterparties on the order book, producing multiple fill records. Each action in the array shows:
+
+| Field | Description |
+|---|---|
+| `actionType` | `Buy`, `Sell`, or `Redeem` |
+| `shares` | Number of outcome token shares in this fill |
+| `price` | Fill price **in cents** (0–100); `98.378249` means ~98.4¢ per share |
+| `txValue` | USDC value of this individual fill |
+| `fee` | Protocol fee for this fill, in USDC |
+| `positionSide` | Which outcome was traded: `Yes` or `No` |
+| `liquidityRole` | `MAKER` if this actor provided liquidity; `TAKER` if they removed it |
+
+---
+
+## Part 3 — Poll for new activity
+
+The Orbscan API is a REST endpoint, not a streaming connection. To watch for new trades in near real-time, poll the activity endpoint on a schedule and advance your `fromTimestamp` after each successful request.
+
+The loop below queries a specific market every 30 seconds, prints any trades it hasn't seen yet, and updates the timestamp so it only fetches genuinely new records on each iteration.
+
+```python Python
+import os
+import time
+import requests
+
+HEADERS = {"Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}"}
+BASE_URL = "https://orbscan.com/open-api"
+
+ADDRESS = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+MARKET_ID = "2707644"
+POLL_INTERVAL_SECONDS = 30
+
+# Start from now — only surface trades that arrive after this script starts
+last_timestamp = int(time.time())
+
+print(f"Polling market {MARKET_ID} for wallet {ADDRESS[:10]}... (Ctrl-C to stop)\n")
+
+while True:
+    try:
+        response = requests.get(
+            f"{BASE_URL}/v1/trader/{ADDRESS}/activity",
+            headers=HEADERS,
+            params={
+                "marketIds": MARKET_ID,
+                "fromTimestamp": last_timestamp,
+                "limit": 100,
+            },
+        )
+        response.raise_for_status()
+        items = response.json()["data"]["items"]
+
+        if items:
+            # Update the cursor to the newest timestamp seen
+            newest_time = max(item["time"] for item in items)
+            last_timestamp = newest_time + 1  # +1 to avoid re-fetching the same record
+
+            for item in sorted(items, key=lambda x: x["time"]):
+                print(
+                    f"[{item['time']}] {item['action']:6s} | "
+                    f"{item['positionSide']:3s} | "
+                    f"{item['quantity']} shares @ {item['price']}¢ | "
+                    f"{item['marketTitle'][:50]}"
+                )
+        else:
+            print(f"  No new activity since timestamp {last_timestamp}")
+
+    except requests.RequestException as e:
+        print(f"  Request error: {e}")
+
+    time.sleep(POLL_INTERVAL_SECONDS)
+```
+
+<Tip>
+  Both `fromTimestamp` and `toTimestamp` accept **Unix seconds**, not milliseconds. Use `int(time.time())` in Python or `Math.floor(Date.now() / 1000)` in JavaScript to generate a valid value from the current time.
+</Tip>

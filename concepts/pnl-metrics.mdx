@@ -1,0 +1,132 @@
+---
+title: "PnL and Performance Metrics Explained"
+sidebarTitle: "PnL Metrics"
+description: "Learn how Orbscan computes realized and unrealized PnL, Sharpe ratio, win rate, and max drawdown for Polymarket traders from on-chain data."
+---
+
+Orbscan computes a suite of performance metrics for every Polymarket trader, derived entirely from on-chain data recorded on the Polygon network. Because every trade, redemption, and payout is auditable on-chain, the calculations are transparent and tamper-proof — you can verify any figure against the raw blockchain events yourself. These metrics help you evaluate trader quality, compare strategies, and understand the risk profile behind any wallet's track record.
+
+## PnL: Profit and Loss
+
+PnL measures the net money a trader has made or lost across their Polymarket activity. Orbscan denominates all PnL figures in **USD (USDC)**, since Polymarket settles entirely in USDC on Polygon.
+
+### Realized PnL
+
+Realized PnL covers positions that have already been closed — either by selling shares before resolution, or by redeeming a payout after a market resolves. This is money definitively made or lost.
+
+```text
+realized_pnl = sale_proceeds - cost_basis
+```
+
+For a Redeem, `sale_proceeds` equals `quantity × $1.00` (since every winning share redeems at 100¢). For a Sell, `sale_proceeds` equals `quantity × sale_price`.
+
+### Unrealized PnL
+
+Unrealized PnL covers positions that are still open. It reflects the gain or loss you would lock in if you sold your current shares at today's market price.
+
+```text
+unrealized_pnl = current_market_value - cost_basis
+```
+
+### Total PnL
+
+Total PnL combines both components:
+
+```text
+total_pnl = realized_pnl + unrealized_pnl
+```
+
+## Prices Are in Cents
+
+All `price` values in Orbscan are expressed in **cents (¢)**, ranging from 0 to 100 — not dollars. This is a critical detail when calculating trade values yourself.
+
+- A `price` of `78` means **78¢ per share**.
+- Buying `100` shares at a price of `78` costs **$78 USDC** (100 × $0.78).
+- If that market resolves Yes, those 100 shares redeem for **$100 USDC** — a profit of **$22**.
+
+The `grossValue` field reflects this calculation: `grossValue = (price / 100) × quantity`. A buy of 5 shares at 78¢ produces `grossValue = 3.9` (i.e., $3.90).
+
+## grossValue vs transferNetAmount
+
+These two fields both measure value in USDC, but they capture different things:
+
+| Field | Formula | What It Represents |
+|---|---|---|
+| `grossValue` | `(price / 100) × quantity` | The theoretical value of the shares traded, based on price and quantity alone. |
+| `transferNetAmount` | Actual USDC moved ± fees | The real USDC that changed hands in the transaction, after the platform fee is applied. Positive = USDC received by the wallet; negative = USDC sent by the wallet. |
+
+For a Buy of 5 shares at 78¢ with a fee of $0.026:
+- `grossValue` = **$3.90** (the share value)
+- `transferNetAmount` = **$5.00** (the USDC the wallet actually paid, which includes share cost plus market-maker pricing)
+
+The difference between `transferNetAmount` and `grossValue` reflects platform fees and any order-book spread. For a Redeem, `transferNetAmount` is negative (USDC flows into the wallet) and equals `quantity × 1.00`.
+
+## Platform Fees
+
+The `fee` field on every activity record is the **platform fee** deducted from the trade value, denominated in USDC. Fees apply to Buy and Sell actions; Redeems always have `fee = 0`.
+
+```json
+{
+  "action": "Buy",
+  "price": 78.0,
+  "quantity": 5.0,
+  "fee": 0.02574,
+  "grossValue": 3.9,
+  "transferNetAmount": 5.0
+}
+```
+
+Fees are deducted by the Polymarket protocol at the time of the trade. Orbscan surfaces the raw fee amount so you can accurately reconstruct cost basis and compare net vs. gross performance.
+
+## Performance Metrics Summary
+
+| Metric | Field | Definition | Time Window |
+|---|---|---|---|
+| Total PnL | `pnl_total` | `realized_pnl + unrealized_pnl` across all activity | All-time |
+| 30-Day PnL | `pnl_30d` | Rolling PnL for trades opened or closed in the past 30 days | 30 days |
+| Win Rate | `win_rate` | `(resolved_wins / total_resolved_markets) × 100` | All-time |
+| Sharpe Ratio | `sharpe_ratio` | `mean_return / std_deviation_of_returns` | All-time |
+| Max Drawdown | `max_drawdown` | Largest peak-to-trough decline in cumulative PnL | All-time |
+
+## Win Rate
+
+Win rate measures how consistently a trader picks the correct outcome across resolved markets:
+
+```text
+win_rate = (resolved_wins / total_resolved_markets) × 100
+```
+
+A **win** is counted when the trader held shares of the outcome declared correct at resolution — regardless of position size or entry price. Win rate is a consistency signal, not a profit signal. A trader with a 90% win rate who always bets small on high-probability outcomes may generate less dollar PnL than a trader with a 60% win rate who sizes up on high-conviction calls. Always read win rate alongside `pnl_total` and `sharpe_ratio` for a complete picture.
+
+## Sharpe Ratio
+
+The Sharpe ratio is a **risk-adjusted return** metric. It rewards consistent gains and penalizes large swings in performance, even if those swings are ultimately positive.
+
+```text
+sharpe_ratio = mean_return / standard_deviation_of_returns
+```
+
+Use the following benchmarks when evaluating traders on Polymarket:
+
+| Sharpe Ratio | Interpretation |
+|---|---|
+| Below 0 | Negative risk-adjusted performance |
+| 0 – 0.5 | Marginal — returns don't compensate for volatility |
+| 0.5 – 1.0 | Good — solid, consistent performance |
+| Above 1.0 | Excellent — strong outperformance relative to risk taken |
+
+In prediction markets, a Sharpe ratio of **0.5 or above** is generally considered good, given the inherently binary and high-variance nature of individual market outcomes.
+
+## Max Drawdown
+
+Max drawdown captures the **largest peak-to-trough decline** in a trader's cumulative PnL over their history. It answers the question: "What is the worst losing streak this trader has experienced?"
+
+```text
+max_drawdown = max(peak_cumulative_pnl - subsequent_trough_pnl)
+```
+
+A low max drawdown relative to total PnL indicates that a trader grows their balance steadily without large reversals. A high max drawdown — even paired with strong total PnL — suggests the trader took on significant risk at some point and may do so again.
+
+<Note>
+  Orbscan updates all performance metrics in near real time as new on-chain events are indexed. PnL, win rate, and position values refresh continuously with each new Polygon block. Under normal network conditions, metrics are never stale by more than a few minutes.
+</Note>

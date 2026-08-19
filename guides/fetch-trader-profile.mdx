@@ -1,0 +1,211 @@
+---
+title: "Fetch and Analyze a Trader's On-Chain Activity"
+sidebarTitle: "Trader Activity"
+description: "Pull a complete wallet trade history from Orbscan, filter by market or time range, and paginate through all results using cursor-based pagination."
+---
+
+This guide shows you how to pull a wallet's complete trade history using the Orbscan activity endpoint and how to analyze the results. You'll learn how to filter records by market or time range and how to paginate through large histories so you never miss a trade.
+
+<Steps>
+
+<Step title="Call the activity endpoint">
+
+Send a `GET` request to `/v1/trader/{address}/activity` with your wallet address. The endpoint returns records newest-first — pass `limit=10` to start with a small, readable sample.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=10' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import os
+import requests
+
+ADDRESS = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+HEADERS = {"Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}"}
+
+response = requests.get(
+    f"https://orbscan.com/open-api/v1/trader/{ADDRESS}/activity",
+    headers=HEADERS,
+    params={"limit": 10},
+)
+
+data = response.json()
+for item in data["data"]["items"]:
+    print(f"{item['action']} | {item['marketTitle']} | price: {item['price']}¢ | qty: {item['quantity']}")
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Read the response">
+
+A successful response wraps results in a `data` object containing an `items` array and a `nextCursor` for pagination. Here is a real example showing a Buy record followed by the Redeem that closed it:
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "time": 1782861128,
+        "action": "Redeem",
+        "recordType": "REDEEMS",
+        "actionType": 1,
+        "price": 100.0,
+        "quantity": 5.0,
+        "fee": 0.0,
+        "grossValue": 5.0,
+        "transferNetAmount": -5.0,
+        "txHash": "0x71bf46c3089e2349a62ec6b93638522e8cc635a9836f1308ac7621ce1ecbb609",
+        "tokenId": "91355094557016369228768123360298492968992168419338047915199416797057852525950",
+        "marketId": "2707644",
+        "marketSlug": "fifwc-fra-swe-2026-06-30-fra",
+        "eventSlug": "fifwc-fra-swe-2026-06-30",
+        "conditionId": "0x378f7b5c668014d9f6c42c305ec83902f3c8f6c770b336363aed0076ce6ce1c9",
+        "marketTitle": "Will France win on 2026-06-30?",
+        "positionSide": "Yes",
+        "outcomeIndex": 0,
+        "logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png",
+        "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+        "liquidityRole": null
+      },
+      {
+        "time": 1782765956,
+        "action": "Buy",
+        "recordType": "SUMMARY",
+        "actionType": 0,
+        "price": 78.0,
+        "quantity": 5.0,
+        "fee": 0.02574,
+        "grossValue": 3.9,
+        "transferNetAmount": 5.0,
+        "txHash": "0xbf15dbfb9d3b8b1f5210a582ca78deb73bf77372cb43d8e15edb323750461b1c",
+        "tokenId": "91355094557016369228768123360298492968992168419338047915199416797057852525950",
+        "marketId": "2707644",
+        "marketSlug": "fifwc-fra-swe-2026-06-30-fra",
+        "eventSlug": "fifwc-fra-swe-2026-06-30",
+        "conditionId": "0x378f7b5c668014d9f6c42c305ec83902f3c8f6c770b336363aed0076ce6ce1c9",
+        "marketTitle": "Will France win on 2026-06-30?",
+        "positionSide": "Yes",
+        "outcomeIndex": 0,
+        "logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png",
+        "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+        "liquidityRole": "TAKER"
+      }
+    ],
+    "nextCursor": "MTc4Mjc2NTk1Nnw4OTM3Mzk3NHwxNzR8MHhiZjE1..."
+  }
+}
+```
+
+The key fields in each activity item are:
+
+| Field | Description |
+|---|---|
+| `time` | Unix timestamp (seconds) when the action occurred |
+| `action` | Human-readable label: `Buy`, `Sell`, or `Redeem` |
+| `price` | Price per share **in cents** (0–100); `78.0` means 78¢ |
+| `quantity` | Number of outcome shares involved |
+| `fee` | Protocol fee charged, in USDC |
+| `grossValue` | Gross USDC value of the action before fees |
+| `transferNetAmount` | Net USDC flow — positive means USDC left the wallet (capital deployed), negative means USDC returned (redemption received) |
+| `marketTitle` | Human-readable market question |
+| `positionSide` | Which outcome the trade is on: `Yes` or `No` |
+| `liquidityRole` | `MAKER` or `TAKER` for trades; `null` for redeems |
+| `txHash` | On-chain transaction hash — pass this to `/v1/tx/{txHash}` to decode the full transaction |
+
+<Tip>
+  Prices are always in **cents**, not dollars. A `price` of `78.0` means the trader paid 78¢ per share — equivalent to a 78 % implied probability. Divide by 100 to convert to a 0–1 probability.
+</Tip>
+
+</Step>
+
+<Step title="Filter by market">
+
+Add a `marketIds` query parameter to retrieve trades in a specific market only. Use the numeric market ID from any activity item's `marketId` field.
+
+```bash curl
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?marketIds=2707644&limit=50' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+To filter by multiple markets at once, repeat the parameter:
+
+```
+?marketIds=2707644&marketIds=2682268
+```
+
+</Step>
+
+<Step title="Filter by time range">
+
+Pass `fromTimestamp` to retrieve only activity on or after a specific point in time. The value must be a **Unix timestamp in seconds**.
+
+```bash curl
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?fromTimestamp=1782700000&limit=50' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+Combine `fromTimestamp` and `toTimestamp` to query a precise window:
+
+```
+?fromTimestamp=1782700000&toTimestamp=1782900000
+```
+
+Both parameters accept Unix epoch seconds. Use `int(datetime.datetime(...).timestamp())` in Python or `Date.now() / 1000` in JavaScript to generate values programmatically.
+
+</Step>
+
+<Step title="Paginate through all results">
+
+When the response contains a non-null `nextCursor`, more records are available. Pass that cursor back as the `cursor` query parameter on your next request. Repeat until `nextCursor` is `null`.
+
+```python Python
+import os
+import requests
+
+ADDRESS = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+HEADERS = {"Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}"}
+BASE_URL = "https://orbscan.com/open-api"
+
+all_items = []
+cursor = None
+
+while True:
+    params = {"limit": 100}
+    if cursor:
+        params["cursor"] = cursor
+
+    response = requests.get(
+        f"{BASE_URL}/v1/trader/{ADDRESS}/activity",
+        headers=HEADERS,
+        params=params,
+    )
+    payload = response.json()
+    page_data = payload["data"]
+
+    all_items.extend(page_data["items"])
+    cursor = page_data.get("nextCursor")
+
+    print(f"Fetched {len(page_data['items'])} records — total so far: {len(all_items)}")
+
+    if not cursor:
+        break
+
+print(f"\nDone. Retrieved {len(all_items)} activity records in total.")
+```
+
+Set `limit=100` to minimize the number of round trips — the API caps the maximum at 100 records per page.
+
+</Step>
+
+</Steps>

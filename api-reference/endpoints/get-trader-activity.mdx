@@ -1,0 +1,278 @@
+---
+title: "GET /v1/trader/{address}/activity — Trader History"
+sidebarTitle: "Get Trader Activity"
+description: "GET endpoint that returns paginated buy, sell, and redeem history for any Polymarket wallet, ordered newest-first with cursor pagination."
+---
+
+Use this endpoint to pull a wallet's complete trading history — every **Buy**, **Sell**, and **Redeem** action across all Polymarket markets the wallet has touched, ordered newest-first. Each record tells you what happened, which market it occurred in, at what price and size, and how much USDC moved as a result. This endpoint is the starting point for portfolio analysis, PnL reconstruction, or auditing a specific trader's on-chain activity.
+
+## Request
+
+**`GET https://orbscan.com/open-api/v1/trader/{address}/activity`**
+
+### Path Parameters
+
+<ParamField path="address" type="string" required>
+  The wallet address to query. Must be a valid Ethereum-style address.
+
+  **Example:** `0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee`
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="marketIds" type="array">
+  Filter results to one or more market IDs. Repeat the parameter to pass multiple values — for example, `?marketIds=2707644&marketIds=2682268`. Each value is a string market ID as returned by Polymarket.
+</ParamField>
+
+<ParamField query="txHash" type="string">
+  Filter to a single transaction hash. The value is automatically lower-cased before matching, so you can pass either mixed- or lower-case hashes.
+
+  **Example:** `0x71bf46c3089e2349a62ec6b93638522e8cc635a9836f1308ac7621ce1ecbb609`
+</ParamField>
+
+<ParamField query="fromBlock" type="integer">
+  Only return activity at or after this block height.
+</ParamField>
+
+<ParamField query="toBlock" type="integer">
+  Only return activity at or before this block height.
+</ParamField>
+
+<ParamField query="fromTimestamp" type="integer">
+  Only return activity at or after this Unix timestamp, in seconds (int64).
+
+  **Example:** `1782700000`
+</ParamField>
+
+<ParamField query="toTimestamp" type="integer">
+  Only return activity at or before this Unix timestamp, in seconds (int64).
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Pagination cursor. Pass the `nextCursor` value (an opaque base64 string) returned by the previous response to fetch the next page. Omit this parameter to start from the first (most recent) page.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Number of records to return per page. Defaults to `50`. Maximum is `100`; values above 100 are capped automatically.
+</ParamField>
+
+## Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -G "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity" \
+  --data-urlencode "limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```python Python
+import requests
+
+address = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+url = f"https://orbscan.com/open-api/v1/trader/{address}/activity"
+
+params = {
+    "limit": 50,
+}
+
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+}
+
+response = requests.get(url, params=params, headers=headers)
+print(response.json())
+```
+
+</CodeGroup>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  `true` when the request succeeds, `false` otherwise.
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  Application-level status code. `"0"` indicates success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message, for example `"success"`.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Container for the paginated results.
+
+  <Expandable title="data fields">
+    <ResponseField name="items" type="ActivityItem[]">
+      Array of activity records, ordered newest-first.
+
+      <Expandable title="ActivityItem fields">
+        <ResponseField name="time" type="integer">
+          Unix timestamp (seconds) of when the action occurred.
+        </ResponseField>
+
+        <ResponseField name="action" type="string">
+          Human-readable action label. One of `Buy`, `Sell`, or `Redeem`.
+        </ResponseField>
+
+        <ResponseField name="recordType" type="string">
+          Internal record classification, for example `SUMMARY` or `REDEEMS`.
+        </ResponseField>
+
+        <ResponseField name="actionType" type="integer">
+          Numeric action code. `0` = Buy, `1` = Redeem, and so on.
+        </ResponseField>
+
+        <ResponseField name="price" type="number">
+          Price per share **in cents** (range 0–100). A value of `78.0` means 78¢ per share.
+        </ResponseField>
+
+        <ResponseField name="quantity" type="number">
+          Number of shares involved in this action.
+        </ResponseField>
+
+        <ResponseField name="fee" type="number">
+          Fee charged for this action, in USDC.
+        </ResponseField>
+
+        <ResponseField name="grossValue" type="number">
+          Gross USDC value of the action before fees.
+        </ResponseField>
+
+        <ResponseField name="transferNetAmount" type="number">
+          Net USDC amount moved. Positive means USDC left the wallet (shares received); negative means USDC entered the wallet (shares redeemed or sold).
+        </ResponseField>
+
+        <ResponseField name="txHash" type="string">
+          On-chain transaction hash for this action. Feed this directly into the [Get Transaction](/api-reference/endpoints/get-transaction) endpoint to inspect individual fills.
+        </ResponseField>
+
+        <ResponseField name="tokenId" type="string">
+          Polymarket outcome token ID.
+        </ResponseField>
+
+        <ResponseField name="marketId" type="string">
+          Polymarket market ID.
+        </ResponseField>
+
+        <ResponseField name="marketSlug" type="string">
+          URL-friendly slug for the market.
+        </ResponseField>
+
+        <ResponseField name="eventSlug" type="string">
+          URL-friendly slug for the parent event.
+        </ResponseField>
+
+        <ResponseField name="conditionId" type="string">
+          On-chain condition ID for this market.
+        </ResponseField>
+
+        <ResponseField name="marketTitle" type="string">
+          Human-readable title of the market.
+        </ResponseField>
+
+        <ResponseField name="positionSide" type="string">
+          Which outcome the trade is on. Either `Yes` or `No`.
+        </ResponseField>
+
+        <ResponseField name="outcomeIndex" type="integer">
+          Zero-based index of the outcome: `0` = Yes, `1` = No.
+        </ResponseField>
+
+        <ResponseField name="logo" type="string">
+          URL of the market's logo image.
+        </ResponseField>
+
+        <ResponseField name="trader" type="string">
+          The wallet address that was queried.
+        </ResponseField>
+
+        <ResponseField name="liquidityRole" type="string | null">
+          Whether the trader was a `MAKER` or `TAKER` in this trade. `null` for non-trade actions such as redeems.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="nextCursor" type="string | null">
+      Opaque base64 cursor for the next page. Pass this as the `cursor` query parameter in your next request. `null` means you have reached the last page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "time": 1782861128,
+        "action": "Redeem",
+        "recordType": "REDEEMS",
+        "actionType": 1,
+        "price": 100.0,
+        "quantity": 5.0,
+        "fee": 0.0,
+        "grossValue": 5.0,
+        "transferNetAmount": -5.0,
+        "txHash": "0x71bf46c3089e2349a62ec6b93638522e8cc635a9836f1308ac7621ce1ecbb609",
+        "tokenId": "91355094557016369228768123360298492968992168419338047915199416797057852525950",
+        "marketId": "2707644",
+        "marketSlug": "fifwc-fra-swe-2026-06-30-fra",
+        "eventSlug": "fifwc-fra-swe-2026-06-30",
+        "conditionId": "0x378f7b5c668014d9f6c42c305ec83902f3c8f6c770b336363aed0076ce6ce1c9",
+        "marketTitle": "Will France win on 2026-06-30?",
+        "positionSide": "Yes",
+        "outcomeIndex": 0,
+        "logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png",
+        "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+        "liquidityRole": null
+      },
+      {
+        "time": 1782765956,
+        "action": "Buy",
+        "recordType": "SUMMARY",
+        "actionType": 0,
+        "price": 78.0,
+        "quantity": 5.0,
+        "fee": 0.02574,
+        "grossValue": 3.9,
+        "transferNetAmount": 5.0,
+        "txHash": "0xbf15dbfb9d3b8b1f5210a582ca78deb73bf77372cb43d8e15edb323750461b1c",
+        "tokenId": "91355094557016369228768123360298492968992168419338047915199416797057852525950",
+        "marketId": "2707644",
+        "marketSlug": "fifwc-fra-swe-2026-06-30-fra",
+        "eventSlug": "fifwc-fra-swe-2026-06-30",
+        "conditionId": "0x378f7b5c668014d9f6c42c305ec83902f3c8f6c770b336363aed0076ce6ce1c9",
+        "marketTitle": "Will France win on 2026-06-30?",
+        "positionSide": "Yes",
+        "outcomeIndex": 0,
+        "logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png",
+        "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+        "liquidityRole": "TAKER"
+      }
+    ],
+    "nextCursor": "MTc4Mjc2NTk1Nnw4OTM3Mzk3NHwxNzR8MHhiZjE1..."
+  }
+}
+```
+
+## Filtering
+
+Combine any of the query parameters below to narrow the results returned. All filters are optional and can be used together.
+
+- **`marketIds`** — restrict results to one or more specific markets. Repeat the parameter for each market ID you want: `?marketIds=2707644&marketIds=2682268`. This is useful when you need the history for a wallet within a particular market.
+
+- **`txHash`** — retrieve the activity record(s) for a single on-chain transaction. Helpful when you already have a hash from an explorer and want the decoded Polymarket context.
+
+- **`fromBlock` / `toBlock`** — bound the query by block height. For example, `?fromBlock=88000000&toBlock=88500000` returns only activity within that block range.
+
+- **`fromTimestamp` / `toTimestamp`** — bound the query by time. Values are Unix timestamps in **seconds**. For example, `?fromTimestamp=1782700000&toTimestamp=1782900000` returns activity within a roughly 2.3-day window.
+
+<Tip>
+  All `price` values are in **cents**, not dollars. A `price` of `78.0` means **78¢ per share**, not $78. Divide by 100 to convert to dollars.
+</Tip>

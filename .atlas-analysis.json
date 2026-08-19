@@ -1,45 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Orbscan",
+  "projectType": "api-service",
+  "projectName": "Orbscan",
+  "projectDescription": "Orbscan is a REST API and on-chain explorer for Polymarket prediction markets, providing real-time access to trader activity, deposits and withdrawals, and transaction details.",
   "theme": "luma",
-  "colors": {
-    "primary": "#1be49c",
-    "light": "#0c8c5c",
-    "dark": "#0c0c0c"
-  },
-  "favicon": "https://media.brand.dev/483ee27f-08fb-4d32-842d-86b4c40f9fb4.png",
-  "logo": {
-    "light": "https://media.brand.dev/07fcb57b-76a5-49f6-abdb-740da69c791f.svg",
-    "dark": "https://media.brand.dev/07fcb57b-76a5-49f6-abdb-740da69c791f.svg",
-    "href": "https://orbscan.com"
-  },
-  "navbar": {
-    "primary": {
-      "type": "button",
-      "label": "Visit Orbscan",
-      "href": "https://orbscan.com"
-    }
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/OrbscanHQ"
-    }
-  },
-  "fonts": {
-    "heading": {
-      "family": "Inter",
-      "weight": 600
-    },
-    "body": {
-      "family": "Inter",
-      "weight": 400
-    }
-  },
-  "background": {
-    "color": {
-      "dark": "#0A0B10"
-    }
-  },
+  "primaryColor": "#1be49c",
+  "lightColor": "#0c8c5c",
+  "darkColor": "#0c0c0c",
   "navigation": {
     "tabs": [
       {
@@ -95,5 +61,19 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Paginated trader activity — every buy, sell, and redeem across all Polymarket markets",
+    "Deposits & withdrawals history — full USDC transfer record for any wallet",
+    "Transaction decoder — human-readable summary and individual fills for any on-chain tx hash",
+    "Cursor-based pagination with configurable page sizes up to 100 records",
+    "Filter activity by market ID, transaction hash, block range, or timestamp range",
+    "Standard JSON response envelope with consistent error codes",
+    "Bearer token authentication with per-plan rate limits"
+  ],
+  "publicApiSurface": [
+    "GET /v1/trader/{address}/activity",
+    "GET /v1/trader/{address}/deposits-withdrawals",
+    "GET /v1/tx/{txHash}"
+  ]
 }

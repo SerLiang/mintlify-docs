@@ -1,0 +1,112 @@
+---
+title: "Markets: Prediction Market Structure on Polymarket"
+sidebarTitle: "Markets"
+description: "Learn how Polymarket prediction markets are structured in Orbscan — identifiers, outcome tokens, categories, and how resolved markets work."
+---
+
+A Polymarket market is a question about a future event — for example, "Will France win on 2026-06-30?" — that resolves to one of a fixed set of outcomes on a specific date. Most markets are **binary**, resolving to either Yes or No, though multi-outcome markets exist for events with several candidates or options. Traders buy shares in the outcome they believe will occur, and each winning share pays out exactly $1 (100¢) at resolution. Orbscan indexes every active and resolved Polymarket market and exposes their full detail through the activity and transaction endpoints.
+
+## Market Identifiers
+
+Every market in Orbscan carries multiple identifiers, each serving a different purpose:
+
+| Identifier | Type | Description |
+|---|---|---|
+| `marketId` | `string` | A numeric string uniquely identifying the market (e.g., `"2707644"`). Use this to filter activity responses via the `marketIds` query parameter. |
+| `marketSlug` | `string` | A URL-friendly, human-readable string (e.g., `"fifwc-fra-swe-2026-06-30-fra"`). Stable across API versions and useful for display. |
+| `conditionId` | `string` | A `0x`-prefixed on-chain hash that identifies the market's condition contract on Polygon (e.g., `"0x378f7b5c..."`). Use this to verify market data against the blockchain directly. |
+| `eventSlug` | `string` | Groups related markets under a shared parent event (e.g., `"fifwc-fra-swe-2026-06-30"` groups all match-outcome markets for a single fixture). |
+
+When you retrieve trader activity from Orbscan, every activity item includes `marketId`, `marketSlug`, `eventSlug`, `conditionId`, and `marketTitle` — giving you everything you need to identify and cross-reference the market without a separate lookup.
+
+## Outcome Tokens
+
+Each binary market has two outcome tokens — one for **Yes** and one for **No**. These are ERC-1155 tokens on Polygon that represent shares in a particular outcome.
+
+| Field | Description |
+|---|---|
+| `tokenId` | The numeric string ID of the specific outcome token traded (e.g., the Yes token or the No token). |
+| `positionSide` | `"Yes"` or `"No"` — which outcome the token and trade correspond to. |
+| `outcomeIndex` | `0` for Yes, `1` for No. This is the index of the outcome within the market's outcome array. |
+
+When a trader buys Yes shares, the `tokenId` refers to the Yes outcome token for that market. When the market resolves Yes, only holders of the Yes token can redeem.
+
+## Market Categories
+
+Orbscan organizes markets into topic categories so you can quickly surface relevant questions:
+
+<CardGroup cols={3}>
+  <Card title="Politics" icon="landmark">
+    Elections, legislation, geopolitics, and government policy.
+  </Card>
+  <Card title="Sports" icon="trophy">
+    Match outcomes, championships, player awards, and tournament brackets.
+  </Card>
+  <Card title="Crypto" icon="bitcoin">
+    Prices, protocol upgrades, token launches, and on-chain metrics.
+  </Card>
+  <Card title="Finance" icon="building-columns">
+    Stock prices, ETF approvals, earnings results, and market indices.
+  </Card>
+  <Card title="Tech" icon="microchip">
+    Product launches, AI milestones, regulatory decisions, and company events.
+  </Card>
+  <Card title="Economics" icon="chart-line">
+    GDP, inflation, unemployment, and macroeconomic indicators.
+  </Card>
+  <Card title="Culture" icon="star">
+    Entertainment, awards, viral events, and social trends.
+  </Card>
+  <Card title="Weather" icon="cloud">
+    Temperature records, storm events, and climate benchmarks.
+  </Card>
+  <Card title="Mentions" icon="megaphone">
+    Whether a specific topic, person, or phrase will be mentioned in a defined context.
+  </Card>
+</CardGroup>
+
+## Market Logo
+
+Every market in Orbscan includes a `logo` field (also returned as `marketLogo` on transaction action records) — a URL pointing to the market's cover image hosted on Polymarket's CDN. Use this field to render market thumbnails in your UI without managing image assets yourself.
+
+```json
+"logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png"
+```
+
+## How Markets Appear in Orbscan Responses
+
+You don't query markets as standalone resources in the Orbscan API — market data is embedded directly on activity and transaction records. Every item in an activity response carries the full market context you need:
+
+```json
+{
+  "marketId": "2707644",
+  "marketSlug": "fifwc-fra-swe-2026-06-30-fra",
+  "marketTitle": "Will France win on 2026-06-30?",
+  "eventSlug": "fifwc-fra-swe-2026-06-30",
+  "conditionId": "0x378f7b5c668014d9f6c42c305ec83902f3c8f6c770b336363aed0076ce6ce1c9",
+  "positionSide": "Yes",
+  "outcomeIndex": 0,
+  "tokenId": "91355094557016369228768123360298492968992168419338047915199416797057852525950",
+  "logo": "https://polymarket-upload.s3.us-east-2.amazonaws.com/soccer-ball.png"
+}
+```
+
+This design means a single activity query gives you both the trade details and the market context in one response — no additional round-trip required.
+
+## Resolved Markets and Redeems
+
+When a market resolves, Polymarket declares one outcome as correct. Traders who hold shares of the winning outcome can then submit a **Redeem** transaction to collect their payout.
+
+In Orbscan activity data, a resolved market redemption looks like this:
+
+- `action` is `"Redeem"`
+- `price` is `100.0` — the winning share redeems at exactly 100¢ ($1)
+- `positionSide` is the winning outcome (e.g., `"Yes"`)
+- `transferNetAmount` is **negative** — USDC flows out of the contract into the trader's wallet (Orbscan signs this from the market's perspective)
+- `liquidityRole` is `null` — no order book matching occurs at redemption
+
+Shares of the **losing** outcome expire worthless at resolution. There is no Redeem record for the losing side — those tokens simply become unexercisable.
+
+<Note>
+  Resolved market history remains fully queryable through Orbscan. Even after a market closes, you can retrieve every trade that occurred in it by filtering activity with the market's `marketId`.
+</Note>

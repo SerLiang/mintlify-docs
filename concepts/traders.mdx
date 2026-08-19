@@ -1,0 +1,73 @@
+---
+title: "Traders: Wallets, Activity, and Positions on Polymarket"
+sidebarTitle: "Traders"
+description: "Understand how Orbscan identifies Polymarket traders by wallet address, tracks their activity, and records positions and liquidity roles."
+---
+
+In Orbscan, a **trader** is any Polygon wallet address that has ever interacted with Polymarket — placing a trade, selling shares, or redeeming a payout. There is no registration step and no account to create. Your wallet address is your identity, and Orbscan builds a full activity and performance profile around it automatically from on-chain events.
+
+## Trader Identity
+
+Every trader in Orbscan is anchored to a `0x`-prefixed Polygon wallet address — the primary key used in every API call. For example, to query a trader's activity, you pass their address in the path: `/v1/trader/{address}/activity`.
+
+Traders may optionally have a **username** set through Polymarket's profile system. When a username is available, Orbscan surfaces it alongside the wallet address for readability. When no username exists, the wallet address is displayed in full. In all cases, the wallet address is the canonical identifier — usernames are cosmetic and cannot be used as API parameters.
+
+<Note>
+  Wallet addresses are case-insensitive in the Orbscan API. Pass an address in any casing — all lowercase, all uppercase, or mixed — and Orbscan normalizes it before processing.
+</Note>
+
+## Trader Data Model
+
+Each trader profile in Orbscan is built from the following core components:
+
+- **Wallet address** — the `0x` identifier, and the primary key for all lookups.
+- **Username** — an optional display name from Polymarket; `null` when not configured.
+- **Activity** — a paginated, time-ordered record of every Buy, Sell, and Redeem action the wallet has performed.
+- **Positions** — the outcome token holdings the wallet currently holds, including which side (Yes or No), quantity, and average cost basis.
+
+## Activity Types
+
+Every on-chain event recorded against a trader falls into one of three action types:
+
+**Buy** — The trader purchased shares of an outcome token in a prediction market. A Buy increases the trader's position on a given side (Yes or No) and transfers USDC out of the wallet.
+
+**Sell** — The trader sold shares they previously held back into the market. A Sell reduces or closes an open position and returns USDC to the wallet.
+
+**Redeem** — After a market resolves, the trader collected their payout for holding the winning outcome. Redeems only occur on the winning side; each share redeems for exactly $1 (100¢). The `price` field on a Redeem record is always `100.0`.
+
+<Tip>
+  Use the `action` field in activity responses to filter for specific event types. To see only payouts, filter for `"action": "Redeem"`.
+</Tip>
+
+## Liquidity Roles: MAKER vs TAKER
+
+The `liquidityRole` field on each activity record indicates how the trader's order was matched on Polymarket's order book:
+
+| Role | Meaning |
+|---|---|
+| `MAKER` | The trader placed a **limit order** that sat on the book and was filled by a counterparty. Makers typically receive a tighter spread. |
+| `TAKER` | The trader placed a **market order** that immediately matched against an existing limit order. Takers consume liquidity. |
+| `null` | The action was a **Redeem** — no order book matching is involved in a post-resolution payout. |
+
+Understanding a trader's liquidity role helps you distinguish active order-book participants (makers) from traders who execute at market prices (takers), which can inform your analysis of their strategy and cost structure.
+
+## Activity Response Fields
+
+The following fields appear on every item returned by the `/v1/trader/{address}/activity` endpoint:
+
+| Field | Type | Description |
+|---|---|---|
+| `time` | `integer` | Unix timestamp (seconds) when the action was recorded on-chain. |
+| `action` | `string` | Human-readable action label: `Buy`, `Sell`, or `Redeem`. |
+| `price` | `number` | Price per share **in cents (0–100)**. A value of `78` means 78¢ per share. |
+| `quantity` | `number` | Number of outcome shares involved in the action. |
+| `grossValue` | `number` | Gross USDC value of the action — calculated as `price × quantity / 100`. |
+| `transferNetAmount` | `number` | Net USDC actually moved: positive means USDC flowed **into** the wallet (sell or redeem), negative means USDC flowed **out** (buy). |
+| `fee` | `number` | Platform fee deducted from the trade value, in USDC. `0` for redeems. |
+| `positionSide` | `string` | Which outcome the trade is on: `"Yes"` or `"No"`. |
+| `liquidityRole` | `string \| null` | `MAKER`, `TAKER`, or `null` for redeems. |
+| `txHash` | `string` | On-chain transaction hash — use this to audit the event on a block explorer. |
+
+## Real-Time Data
+
+Orbscan indexes Polymarket on-chain events in **near real time**. Activity records, position updates, and performance metrics reflect on-chain state within seconds of each new block being confirmed on Polygon. Under normal network conditions, data is never stale by more than a minute.

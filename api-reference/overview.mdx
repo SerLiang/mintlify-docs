@@ -1,0 +1,113 @@
+---
+title: "Orbscan Open API — Base URL, Format, and Pagination"
+sidebarTitle: "Overview"
+description: "Learn the base URL, response envelope, cursor pagination, and the three endpoints that make up the Orbscan Open API for Polymarket data."
+---
+
+The Orbscan Open API is a REST API that gives you programmatic access to on-chain Polymarket data. It returns JSON for every request — successes and errors alike — and is designed for developers, analysts, and data pipelines that need reliable access to trader activity, wallet transfers, and decoded transaction details.
+
+## Base URL
+
+Send all requests to the following base URL:
+
+```text
+https://orbscan.com/open-api
+```
+
+Every endpoint path in this reference is relative to that base. For example, `GET /v1/trader/{address}/activity` resolves to:
+
+```text
+https://orbscan.com/open-api/v1/trader/{address}/activity
+```
+
+## Authentication
+
+Every request must include your API key as a **Bearer token** in the `Authorization` header. Requests without a valid key return a `401` error. See [Authentication](/api-reference/authentication) for setup instructions and code samples.
+
+```bash
+curl "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=1" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Response Format
+
+Every response — successful or not — uses the same JSON envelope:
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": { }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `success` | boolean | `true` when the request succeeded, `false` on any error. |
+| `code` | string | `"0"` on success. On failure, this is the HTTP status as a string — for example, `"401"`, `"400"`, or `"429"`. |
+| `message` | string | `"success"` on a successful request, or a human-readable description of what went wrong. |
+| `data` | object / null | The requested payload. `null` when the request fails, or when a valid lookup finds no matching record. |
+
+<Note>
+  A `200` response with `success: true` and `data: null` is **not** an error — it means your request was valid but no matching record exists. For list endpoints, check whether `data.items` is an empty array rather than relying on the HTTP status alone.
+</Note>
+
+## Pagination
+
+The list endpoints support cursor-based pagination. Follow these steps to walk through all pages:
+
+1. Make your first request, optionally setting `limit` (default `50`, maximum `100`).
+2. Read `data.nextCursor` from the response.
+3. If `nextCursor` is **not** `null`, pass its value as the `cursor` query parameter on your next request.
+4. Continue until `nextCursor` is `null` — that signals the final page.
+
+```bash
+# Page 1 — no cursor needed
+curl "https://orbscan.com/open-api/v1/trader/{address}/activity?limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Page 2 — pass the nextCursor value from page 1
+curl "https://orbscan.com/open-api/v1/trader/{address}/activity?limit=50&cursor=MTc4Mjc2NTk1Nnw4OTM3Mzk3NHwxNzR8MHhiZjE1..." \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+The response for each page includes a `nextCursor` field alongside the results:
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "items": [ ],
+    "nextCursor": "MTc4Mjc2NTk1Nnw4OTM3Mzk3NHwxNzR8MHhiZjE1..."
+  }
+}
+```
+
+When you reach the last page, `nextCursor` is `null`:
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "items": [ ],
+    "nextCursor": null
+  }
+}
+```
+
+## Available Endpoints
+
+| Endpoint | Path | Description |
+|---|---|---|
+| Get Trader Activity | `GET /v1/trader/{address}/activity` | Paginated buy, sell, and redeem history for a wallet across all Polymarket markets it has touched. |
+| Get Deposits & Withdrawals | `GET /v1/trader/{address}/deposits-withdrawals` | Combined USDC deposit and withdrawal history for a wallet, ordered newest-first. |
+| Get Actions by Hash | `GET /v1/tx/{txHash}` | Decoded summary and individual fills for a single on-chain transaction. |
+
+<Tip>
+  Prices in activity and transaction responses are expressed in **cents** (0–100). A `price` of `78.0` means 78¢ per share, not $78. Keep this in mind when calculating position values or P&L.
+</Tip>

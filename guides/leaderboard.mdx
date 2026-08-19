@@ -1,0 +1,140 @@
+---
+title: "Build a Trader Leaderboard with Orbscan Data"
+sidebarTitle: "Leaderboard"
+description: "Fetch activity for multiple Polymarket wallets, compute net capital deployed per trader, and rank them to build a custom leaderboard."
+---
+
+This guide shows you how to identify top traders using Orbscan data. Rather than relying on a pre-built ranking, you'll fetch raw activity for a set of wallets, compute a performance metric for each one, and sort the results to build a leaderboard you control entirely.
+
+<Steps>
+
+<Step title="Choose your trader set">
+
+You need a list of wallet addresses to rank. There are two practical ways to source them:
+
+- **Orbscan website** — visit [orbscan.com](https://orbscan.com) and browse the public leaderboard. Copy wallet addresses from trader profile URLs (e.g. `orbscan.com/profile/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee`).
+- **Manually curated list** — if you already know which wallets you want to track (from social media, public research, or prior analysis), compile them directly into your script.
+
+Start with a small set (5–20 wallets) while you tune your ranking logic, then scale up once the pipeline is working.
+
+</Step>
+
+<Step title="Fetch activity for each wallet">
+
+Call `GET /v1/trader/{address}/activity` for each wallet in your list. Use `limit=100` and paginate through all pages so you have the complete history before scoring.
+
+```bash curl
+# Fetch activity for a single wallet
+curl --request GET \
+  --url 'https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=100' \
+  --header 'Authorization: Bearer YOUR_API_KEY'
+```
+
+</Step>
+
+<Step title="Compute the ranking">
+
+Sum `transferNetAmount` across all activity records for each wallet. A positive total means USDC left the wallet on net (capital deployed into the market); a negative total means capital was returned via redeems. This provides a simple proxy for how aggressively a trader has been deploying capital.
+
+The Python script below fetches the full history for every wallet in your list, computes each wallet's total `transferNetAmount`, and prints a ranked table.
+
+```python Python
+import os
+import time
+import requests
+
+HEADERS = {"Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}"}
+BASE_URL = "https://orbscan.com/open-api"
+
+WALLETS = [
+    "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+    # Add more wallet addresses here
+]
+
+
+def fetch_all_activity(address: str) -> list:
+    """Paginate through all activity records for a wallet."""
+    items = []
+    cursor = None
+
+    while True:
+        params = {"limit": 100}
+        if cursor:
+            params["cursor"] = cursor
+
+        response = requests.get(
+            f"{BASE_URL}/v1/trader/{address}/activity",
+            headers=HEADERS,
+            params=params,
+        )
+        response.raise_for_status()
+        page = response.json()["data"]
+        items.extend(page["items"])
+        cursor = page.get("nextCursor")
+
+        if not cursor:
+            break
+
+    return items
+
+
+def compute_score(items: list) -> dict:
+    """Return summary metrics for a list of activity items."""
+    total_net = sum(item["transferNetAmount"] for item in items)
+    buys = [i for i in items if i["action"] == "Buy"]
+    redeems = [i for i in items if i["action"] == "Redeem"]
+    total_volume = sum(i["grossValue"] for i in buys)
+
+    return {
+        "total_net_amount": round(total_net, 4),
+        "total_buy_volume": round(total_volume, 4),
+        "buy_count": len(buys),
+        "redeem_count": len(redeems),
+        "record_count": len(items),
+    }
+
+
+# Build leaderboard
+results = []
+for address in WALLETS:
+    print(f"Fetching {address[:10]}...")
+    items = fetch_all_activity(address)
+    score = compute_score(items)
+    score["address"] = address
+    results.append(score)
+    time.sleep(0.5)  # Be polite — space out requests
+
+# Rank by total net USDC deployed (descending)
+results.sort(key=lambda r: r["total_net_amount"], reverse=True)
+
+print("\n--- Leaderboard ---")
+print(f"{'Rank':<5} {'Address':<14} {'Net USDC':>12} {'Buy Vol':>12} {'Buys':>6} {'Redeems':>8}")
+print("-" * 62)
+for rank, r in enumerate(results, start=1):
+    short = r["address"][:6] + "..." + r["address"][-4:]
+    print(
+        f"{rank:<5} {short:<14} {r['total_net_amount']:>12.2f} "
+        f"{r['total_buy_volume']:>12.2f} {r['buy_count']:>6} {r['redeem_count']:>8}"
+    )
+```
+
+</Step>
+
+<Step title="Display or export the results">
+
+Once you have a ranked list, you can render it in whatever format suits your use case:
+
+- **Terminal table** — the `print` loop above is a good starting point for quick analysis.
+- **CSV export** — add `import csv` and write `results` to a file with `csv.DictWriter` for spreadsheet analysis or sharing.
+- **Web UI** — pass `results` as JSON to a frontend table component (React, Vue, plain HTML) and add sortable column headers.
+- **Database** — insert each row into a database table and run SQL queries to compare traders over different time windows.
+
+For ongoing monitoring, schedule the script to run on a cron job and append new results to a time-series store so you can track rank changes over days or weeks.
+
+</Step>
+
+</Steps>
+
+<Note>
+  When fetching activity for many wallets in a loop, space your requests at least 500 ms apart to avoid hitting rate limits. For very large trader sets (100+ wallets), consider batching requests in groups and adding a longer sleep between groups.
+</Note>

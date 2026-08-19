@@ -1,0 +1,142 @@
+---
+title: "GET /v1/trader/{address}/deposits-withdrawals — Transfers"
+sidebarTitle: "Deposits & Withdrawals"
+description: "GET endpoint returning a paginated, newest-first combined list of USDC deposits and withdrawals for any Polymarket wallet address."
+---
+
+Use this endpoint to see every USDC transfer into and out of a Polymarket wallet. It returns a single combined list — ordered newest-first — where each record's `type` is either `deposit` or `withdrawal`. Use it to reconstruct a wallet's funding history, verify that a specific transfer landed, or calculate net capital flows over time.
+
+## Request
+
+**`GET https://orbscan.com/open-api/v1/trader/{address}/deposits-withdrawals`**
+
+### Path Parameters
+
+<ParamField path="address" type="string" required>
+  The wallet address to query. Must be a valid Ethereum-style address.
+
+  **Example:** `0x43372356634781eea88d61bbdd7824cdce958882`
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="cursor" type="string">
+  Pagination cursor. Pass the `nextCursor` value returned by the previous response to fetch the next page. Omit this parameter to start from the most recent records.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Number of records to return per page. Defaults to `50`. Maximum is `100`; values above 100 are capped automatically.
+</ParamField>
+
+## Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -G "https://orbscan.com/open-api/v1/trader/0x43372356634781eea88d61bbdd7824cdce958882/deposits-withdrawals" \
+  --data-urlencode "limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```python Python
+import requests
+
+address = "0x43372356634781eea88d61bbdd7824cdce958882"
+url = f"https://orbscan.com/open-api/v1/trader/{address}/deposits-withdrawals"
+
+params = {
+    "limit": 50,
+}
+
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+}
+
+response = requests.get(url, params=params, headers=headers)
+print(response.json())
+```
+
+</CodeGroup>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  `true` when the request succeeds, `false` otherwise.
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  Application-level status code. `"0"` indicates success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message, for example `"success"`.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Container for the paginated results.
+
+  <Expandable title="data fields">
+    <ResponseField name="items" type="TransferItem[]">
+      Array of deposit and withdrawal records, ordered newest-first.
+
+      <Expandable title="TransferItem fields">
+        <ResponseField name="txHash" type="string">
+          On-chain transaction hash for this transfer.
+        </ResponseField>
+
+        <ResponseField name="type" type="string">
+          Transfer direction. Either `deposit` or `withdrawal`.
+        </ResponseField>
+
+        <ResponseField name="amount" type="number">
+          USDC amount transferred. The value is always positive regardless of direction; use `type` to determine whether funds moved in or out.
+        </ResponseField>
+
+        <ResponseField name="time" type="integer">
+          Unix timestamp (seconds) of when the transfer occurred.
+        </ResponseField>
+
+        <ResponseField name="address" type="string">
+          Counterparty address. For withdrawals this is the destination wallet. For deposits this is the sending address — see the note below about bridged deposits.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="nextCursor" type="string | null">
+      Cursor for the next page. Pass this as the `cursor` query parameter in your next request. `null` means you have reached the last page.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Response
+
+```json
+{
+  "success": true,
+  "code": "0",
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "txHash": "0x9c094e302971de8a6df70ee386bc3815597cbc24002b5f26e25c7127382efa31",
+        "type": "deposit",
+        "amount": 96240.383886,
+        "time": 1786369038,
+        "address": "0x0000000000000000000000000000000000000000"
+      },
+      {
+        "txHash": "0xe5a5321c1486c7e11bb60b0d66cf56ba9b0c8c9e3800ac00a7e9732fc63463ab",
+        "type": "withdrawal",
+        "amount": 15.0,
+        "time": 1786291032,
+        "address": "0x4627ccd2de6c88ce2c0987f14f1d1b8e22697c23"
+      }
+    ],
+    "nextCursor": "1786279260_1309417193"
+  }
+}
+```
+
+<Note>
+  For bridged deposits — where funds arrive via a cross-chain bridge rather than a direct wallet transfer — the `address` field will be the zero address (`0x0000000000000000000000000000000000000000`). This is expected behavior and does not indicate an error. The first record in the example above shows exactly this case.
+</Note>

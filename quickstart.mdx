@@ -1,47 +1,126 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with the Orbscan API in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Make your first Orbscan API call in under 5 minutes. Fetch live trader activity by wallet address and inspect the full JSON response."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This guide gets you from zero to a live API response in under five minutes. You'll obtain an API key, call the trader activity endpoint with a real wallet address, and inspect the JSON response — giving you a working template you can adapt for any other Orbscan endpoint.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Get your API key">
+    Every request to the Orbscan API requires a valid API key in the `Authorization` header. If you don't have one yet, follow the steps in the [Authentication](/authentication) guide to create an account and generate a key.
+
+    Once you have your key, store it in an environment variable so you can reference it safely across requests:
 
     ```bash
-    npm install your-package
+    export ORBSCAN_API_KEY='your_api_key_here'
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
+  <Step title="Fetch trader activity">
+    The trader activity endpoint returns paginated buy, sell, and redeem history for any Polymarket wallet. Send the request below — it fetches the 5 most recent actions for a real wallet address.
+
+    <CodeGroup>
+      ```bash curl
+      curl -X GET "https://orbscan.com/open-api/v1/trader/0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee/activity?limit=5" \
+        -H "Authorization: Bearer $ORBSCAN_API_KEY" \
+        -H "Accept: application/json"
+      ```
+
+      ```python Python
+      import os
+      import requests
+
+      api_key = os.environ["ORBSCAN_API_KEY"]
+      address = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+
+      response = requests.get(
+          f"https://orbscan.com/open-api/v1/trader/{address}/activity",
+          params={"limit": 5},
+          headers={
+              "Authorization": f"Bearer {api_key}",
+              "Accept": "application/json",
+          },
+      )
+
+      data = response.json()
+      print(data)
+      ```
+    </CodeGroup>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
 
-    ```bash
-    your-cli start
+  <Step title="Inspect the response">
+    A successful request returns a JSON object wrapped in the standard Orbscan response envelope. The `data.items` array contains the activity records, and `data.nextCursor` lets you page through the full history.
+
+    ```json
+    {
+      "success": true,
+      "code": "0",
+      "message": "success",
+      "data": {
+        "items": [
+          {
+            "time": 1782861128,
+            "action": "Redeem",
+            "recordType": "REDEEMS",
+            "actionType": 1,
+            "price": 100.0,
+            "quantity": 5.0,
+            "fee": 0.0,
+            "grossValue": 5.0,
+            "transferNetAmount": -5.0,
+            "txHash": "0x71bf46c3089e2349a62ec6b93638522e8cc635a9836f1308ac7621ce1ecbb609",
+            "marketId": "2707644",
+            "marketTitle": "Will France win on 2026-06-30?",
+            "positionSide": "Yes",
+            "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+            "liquidityRole": null
+          },
+          {
+            "time": 1782765956,
+            "action": "Buy",
+            "recordType": "SUMMARY",
+            "actionType": 0,
+            "price": 78.0,
+            "quantity": 5.0,
+            "fee": 0.02574,
+            "grossValue": 3.9,
+            "transferNetAmount": 5.0,
+            "txHash": "0xbf15dbfb9d3b8b1f5210a582ca78deb73bf77372cb43d8e15edb323750461b1c",
+            "marketId": "2707644",
+            "marketTitle": "Will France win on 2026-06-30?",
+            "positionSide": "Yes",
+            "trader": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+            "liquidityRole": "TAKER"
+          }
+        ],
+        "nextCursor": "MTc4Mjc2NTk1Nnw4OTM3Mzk3NHwxNzR8MHhiZjE1..."
+      }
+    }
     ```
+
+    Here are the key fields to understand in each activity record:
+
+    | Field | Description |
+    |---|---|
+    | `time` | Unix timestamp (seconds) of when the action occurred on-chain. |
+    | `action` | Human-readable action label: `Buy`, `Sell`, or `Redeem`. |
+    | `price` | Price per share **in cents** (0–100). A value of `78.0` means 78¢ per share, not $78. |
+    | `quantity` | Number of outcome token shares involved in this action. |
+    | `transferNetAmount` | Net USDC moved: positive means USDC left your wallet (cost), negative means USDC returned to your wallet (proceeds). |
+    | `nextCursor` | Opaque base64 string to pass as the `cursor` query parameter on your next request. `null` when you've reached the last page. |
+  </Step>
+
+  <Step title="Next steps">
+    You've made your first successful Orbscan API call. Here's where to go next:
+
+    <CardGroup cols={2}>
+      <Card title="API Reference" icon="code" href="/api-reference/overview">
+        Browse every available endpoint — trader activity, deposits & withdrawals, and per-transaction action details — with full parameter and response documentation.
+      </Card>
+      <Card title="Guides" icon="map" href="/guides/fetch-trader-profile">
+        Follow step-by-step recipes for common tasks like building a leaderboard widget or tracking a wallet's full trading history.
+      </Card>
+    </CardGroup>
   </Step>
 </Steps>
-
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>

@@ -1,0 +1,172 @@
+---
+title: "Simulate Copy Trading Using Activity History"
+sidebarTitle: "Copy Trading"
+description: "Replay a trader's historical buys and redeems with Orbscan data to estimate what your returns would have been if you had copied their positions."
+---
+
+Copy trading simulation means replaying another trader's historical trades and estimating what your returns would have been if you had entered the same positions at the same prices. This guide walks you through fetching a trader's full activity history, isolating their buy actions, building a position tracker, and computing a total simulated PnL — all using the Orbscan activity endpoint.
+
+<Warning>
+  This simulation is for research purposes only. Replaying past trades does not guarantee the same outcomes in the future. Prediction market prices change constantly, and a trader's past edge may not persist. Nothing here constitutes financial advice.
+</Warning>
+
+<Steps>
+
+<Step title="Pick a trader to follow">
+
+Choose a wallet address whose trading history you want to simulate. You can find candidates by browsing [orbscan.com](https://orbscan.com) or by identifying addresses from other on-chain research. Copy the full hex address — for example:
+
+```
+0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee
+```
+
+</Step>
+
+<Step title="Fetch their full activity history">
+
+Paginate through all pages of `GET /v1/trader/{address}/activity` until `nextCursor` is `null`. This gives you every buy, sell, and redeem the wallet has ever made.
+
+```python Python
+import os
+import requests
+
+HEADERS = {"Authorization": f"Bearer {os.environ['ORBSCAN_API_KEY']}"}
+BASE_URL = "https://orbscan.com/open-api"
+
+
+def fetch_all_activity(address: str) -> list:
+    """Return every activity record for a wallet by paginating to completion."""
+    items = []
+    cursor = None
+
+    while True:
+        params = {"limit": 100}
+        if cursor:
+            params["cursor"] = cursor
+
+        resp = requests.get(
+            f"{BASE_URL}/v1/trader/{address}/activity",
+            headers=HEADERS,
+            params=params,
+        )
+        resp.raise_for_status()
+        page = resp.json()["data"]
+        items.extend(page["items"])
+        cursor = page.get("nextCursor")
+
+        if not cursor:
+            break
+
+    return items
+```
+
+</Step>
+
+<Step title="Filter to Buy actions only">
+
+Discard sells and redeems and keep only records where `action == "Buy"`. These represent the entry points you would have copied.
+
+```python Python
+def get_buys(activity: list) -> list:
+    """Return only Buy records from an activity list."""
+    return [item for item in activity if item["action"] == "Buy"]
+```
+
+</Step>
+
+<Step title="Simulate the portfolio">
+
+For each buy, record the market, the outcome side, the number of shares, and the entry price. When a matching Redeem appears at `price == 100.0`, the market resolved in that trader's favour — compute the return as `(100 - entry_price) * shares / 100` in USDC. Positions with no matching redeem remain open and contribute zero closed PnL.
+
+```python Python
+def simulate_portfolio(activity: list) -> dict:
+    """
+    Build a position tracker from activity records.
+
+    - On Buy: open or add to a position keyed by (marketId, positionSide).
+    - On Redeem at price=100: close the position and record the realized return.
+
+    Returns a dict with open positions and a list of closed trade results.
+    """
+    # positions[(marketId, positionSide)] = {"shares": float, "cost": float}
+    positions = {}
+    closed_trades = []
+
+    # Sort oldest-first so buys are processed before their redeems
+    for item in sorted(activity, key=lambda x: x["time"]):
+        key = (item["marketId"], item["positionSide"])
+
+        if item["action"] == "Buy":
+            price_cents = item["price"]      # e.g. 78.0
+            shares = item["quantity"]
+            cost = item["grossValue"]        # USDC spent
+
+            if key not in positions:
+                positions[key] = {"shares": 0.0, "cost": 0.0,
+                                   "market": item["marketTitle"],
+                                   "entry_price": price_cents}
+            positions[key]["shares"] += shares
+            positions[key]["cost"] += cost
+
+        elif item["action"] == "Redeem" and item["price"] == 100.0:
+            # Market resolved in this trader's favour
+            if key in positions:
+                pos = positions.pop(key)
+                # Each share redeems at $1.00 (100¢)
+                proceeds = pos["shares"] * 1.0          # USDC received
+                pnl = proceeds - pos["cost"]
+                closed_trades.append({
+                    "market": pos["market"],
+                    "positionSide": item["positionSide"],
+                    "shares": pos["shares"],
+                    "entry_price_cents": pos["entry_price"],
+                    "cost_usdc": round(pos["cost"], 4),
+                    "proceeds_usdc": round(proceeds, 4),
+                    "pnl_usdc": round(pnl, 4),
+                })
+
+    return {"open_positions": positions, "closed_trades": closed_trades}
+```
+
+</Step>
+
+<Step title="Compute total simulated PnL">
+
+Sum the `pnl_usdc` from every closed trade to get the overall simulated return. Print a breakdown so you can see which markets drove the most profit or loss.
+
+```python Python
+def run_simulation(address: str) -> None:
+    print(f"Fetching activity for {address[:10]}...")
+    activity = fetch_all_activity(address)
+    print(f"  Retrieved {len(activity)} total records.")
+
+    result = simulate_portfolio(activity)
+    closed = result["closed_trades"]
+    open_pos = result["open_positions"]
+
+    total_pnl = sum(t["pnl_usdc"] for t in closed)
+
+    print(f"\n--- Closed Positions ({len(closed)}) ---")
+    for trade in sorted(closed, key=lambda t: t["pnl_usdc"], reverse=True):
+        sign = "+" if trade["pnl_usdc"] >= 0 else ""
+        print(
+            f"  {trade['positionSide']:3s} | {trade['market'][:55]:<55} | "
+            f"entry: {trade['entry_price_cents']:5.1f}¢ | "
+            f"PnL: {sign}{trade['pnl_usdc']:.2f} USDC"
+        )
+
+    print(f"\n--- Open Positions ({len(open_pos)}) ---")
+    for (market_id, side), pos in open_pos.items():
+        print(f"  {side:3s} | {pos['market'][:55]:<55} | cost: {pos['cost']:.2f} USDC (still open)")
+
+    print(f"\n=== Total Simulated Closed PnL: {'+' if total_pnl >= 0 else ''}{total_pnl:.2f} USDC ===")
+
+
+# Run the simulation
+TRADER_ADDRESS = "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee"
+run_simulation(TRADER_ADDRESS)
+```
+
+</Step>
+
+</Steps>
